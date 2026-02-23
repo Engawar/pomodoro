@@ -11,14 +11,26 @@ public class MainForm : Form
     private readonly Button _startButton = new();
     private readonly Button _pauseButton = new();
     private readonly Button _resetButton = new();
+    private readonly Button _compactButton = new();
     private readonly ListBox _blockedList = new();
+    private readonly GroupBox _settingsGroup = new();
+    private readonly Label _blockedTitle = new();
 
     private readonly System.Windows.Forms.Timer _tickTimer = new();
     private readonly System.Windows.Forms.Timer _blockTimer = new();
 
+    private readonly ContextMenuStrip _contextMenu = new();
+    private readonly ToolStripMenuItem _topMostMenuItem = new();
+    private readonly ToolStripMenuItem _compactMenuItem = new();
+
     private int _remainingSeconds;
     private bool _running;
     private bool _isWorkPhase = true;
+    private bool _isCompactView;
+    private bool _topMostLocked = true;
+
+    private readonly Size _normalSize = new(560, 500);
+    private readonly Size _compactSize = new(300, 170);
 
     private readonly HashSet<string> _blockedProcessNames =
     [
@@ -32,13 +44,15 @@ public class MainForm : Form
     public MainForm()
     {
         Text = "Pomodoro Blocker";
-        Width = 560;
-        Height = 500;
+        Width = _normalSize.Width;
+        Height = _normalSize.Height;
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
+        MinimizeBox = true;
 
         InitializeUi();
+        InitializeContextMenu();
 
         _tickTimer.Interval = 1000;
         _tickTimer.Tick += (_, _) => TickSecond();
@@ -51,14 +65,11 @@ public class MainForm : Form
 
     private void InitializeUi()
     {
-        var settingsGroup = new GroupBox
-        {
-            Text = "Settings (minutes)",
-            Left = 20,
-            Top = 20,
-            Width = 500,
-            Height = 90
-        };
+        _settingsGroup.Text = "Settings (minutes)";
+        _settingsGroup.Left = 20;
+        _settingsGroup.Top = 20;
+        _settingsGroup.Width = 500;
+        _settingsGroup.Height = 90;
 
         var workLabel = new Label { Text = "Work:", Left = 20, Top = 35, Width = 50 };
         _workMinutes.Left = 80;
@@ -76,14 +87,16 @@ public class MainForm : Form
         _breakMinutes.Maximum = 60;
         _breakMinutes.Value = 5;
 
-        settingsGroup.Controls.Add(workLabel);
-        settingsGroup.Controls.Add(_workMinutes);
-        settingsGroup.Controls.Add(breakLabel);
-        settingsGroup.Controls.Add(_breakMinutes);
+        _settingsGroup.Controls.Add(workLabel);
+        _settingsGroup.Controls.Add(_workMinutes);
+        _settingsGroup.Controls.Add(breakLabel);
+        _settingsGroup.Controls.Add(_breakMinutes);
 
         _phaseLabel.Left = 20;
         _phaseLabel.Top = 130;
         _phaseLabel.Width = 500;
+        _phaseLabel.Height = 36;
+        _phaseLabel.TextAlign = ContentAlignment.MiddleLeft;
         _phaseLabel.Font = new Font("Segoe UI", 14, FontStyle.Bold);
 
         _timeLabel.Left = 20;
@@ -112,13 +125,16 @@ public class MainForm : Form
         _resetButton.Width = 120;
         _resetButton.Click += (_, _) => ResetState();
 
-        var blockedTitle = new Label
-        {
-            Text = "Blocked process names while work timer is running:",
-            Left = 20,
-            Top = 295,
-            Width = 500
-        };
+        _compactButton.Text = "Compact View";
+        _compactButton.Left = 430;
+        _compactButton.Top = 240;
+        _compactButton.Width = 90;
+        _compactButton.Click += (_, _) => ToggleCompactView();
+
+        _blockedTitle.Text = "Blocked process names while work timer is running:";
+        _blockedTitle.Left = 20;
+        _blockedTitle.Top = 295;
+        _blockedTitle.Width = 500;
 
         _blockedList.Left = 20;
         _blockedList.Top = 320;
@@ -126,14 +142,26 @@ public class MainForm : Form
         _blockedList.Height = 120;
         _blockedList.Items.AddRange(_blockedProcessNames.OrderBy(x => x).ToArray<object>());
 
-        Controls.Add(settingsGroup);
+        Controls.Add(_settingsGroup);
         Controls.Add(_phaseLabel);
         Controls.Add(_timeLabel);
         Controls.Add(_startButton);
         Controls.Add(_pauseButton);
         Controls.Add(_resetButton);
-        Controls.Add(blockedTitle);
+        Controls.Add(_compactButton);
+        Controls.Add(_blockedTitle);
         Controls.Add(_blockedList);
+    }
+
+    private void InitializeContextMenu()
+    {
+        _topMostMenuItem.Click += (_, _) => ToggleTopMostLock();
+        _compactMenuItem.Click += (_, _) => ToggleCompactView();
+
+        _contextMenu.Items.Add(_topMostMenuItem);
+        _contextMenu.Items.Add(_compactMenuItem);
+
+        ContextMenuStrip = _contextMenu;
     }
 
     private void StartTimer()
@@ -181,7 +209,7 @@ public class MainForm : Form
         {
             _isWorkPhase = !_isWorkPhase;
             _remainingSeconds = (int)(_isWorkPhase ? _workMinutes.Value : _breakMinutes.Value) * 60;
-            System.Media.SystemSounds.Exclamation.Play();
+            PlayPhaseAlarm();
         }
 
         UpdateUi();
@@ -215,15 +243,80 @@ public class MainForm : Form
         }
     }
 
+    private void PlayPhaseAlarm()
+    {
+        if (_isWorkPhase)
+        {
+            System.Media.SystemSounds.Exclamation.Play();
+            System.Media.SystemSounds.Exclamation.Play();
+            return;
+        }
+
+        System.Media.SystemSounds.Asterisk.Play();
+        System.Media.SystemSounds.Asterisk.Play();
+    }
+
+    private void ToggleCompactView()
+    {
+        _isCompactView = !_isCompactView;
+
+        _settingsGroup.Visible = !_isCompactView;
+        _startButton.Visible = !_isCompactView;
+        _pauseButton.Visible = !_isCompactView;
+        _resetButton.Visible = !_isCompactView;
+        _compactButton.Visible = !_isCompactView;
+        _blockedTitle.Visible = !_isCompactView;
+        _blockedList.Visible = !_isCompactView;
+
+        if (_isCompactView)
+        {
+            Size = _compactSize;
+            _phaseLabel.Top = 15;
+            _phaseLabel.Width = 260;
+            _phaseLabel.TextAlign = ContentAlignment.MiddleCenter;
+
+            _timeLabel.Top = 60;
+            _timeLabel.Width = 260;
+            _timeLabel.Height = 70;
+            _timeLabel.TextAlign = ContentAlignment.MiddleCenter;
+        }
+        else
+        {
+            Size = _normalSize;
+            _phaseLabel.Top = 130;
+            _phaseLabel.Width = 500;
+            _phaseLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+            _timeLabel.Top = 165;
+            _timeLabel.Width = 500;
+            _timeLabel.Height = 60;
+            _timeLabel.TextAlign = ContentAlignment.MiddleLeft;
+        }
+
+        UpdateUi();
+    }
+
+    private void ToggleTopMostLock()
+    {
+        _topMostLocked = !_topMostLocked;
+        UpdateUi();
+    }
+
     private void UpdateUi()
     {
         var ts = TimeSpan.FromSeconds(Math.Max(0, _remainingSeconds));
-        _phaseLabel.Text = _isWorkPhase ? "Phase: WORK (blocking enabled)" : "Phase: BREAK (blocking off)";
+        _phaseLabel.Text = _isWorkPhase ? "WORK" : "BREAK";
+        _phaseLabel.ForeColor = _isWorkPhase ? Color.Firebrick : Color.SeaGreen;
         _timeLabel.Text = ts.ToString("mm\\:ss");
 
         _workMinutes.Enabled = !_running;
         _breakMinutes.Enabled = !_running;
         _startButton.Enabled = !_running;
         _pauseButton.Enabled = _running;
+
+        TopMost = _running && _topMostLocked;
+
+        _topMostMenuItem.Text = _topMostLocked ? "右クリック: 最前面固定を解除" : "右クリック: 最前面固定を有効化";
+        _compactMenuItem.Text = _isCompactView ? "通常表示に戻す" : "時間のみ表示に切り替え";
     }
 }
