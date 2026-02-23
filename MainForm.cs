@@ -89,6 +89,9 @@ public class MainForm : Form
         _timeLabel.Left = 20;
         _timeLabel.Top = 165;
         _timeLabel.Width = 500;
+        _timeLabel.Height = 60;
+        _timeLabel.AutoSize = false;
+        _timeLabel.TextAlign = ContentAlignment.MiddleLeft;
         _timeLabel.Font = new Font("Consolas", 28, FontStyle.Bold);
 
         _startButton.Text = "Start";
