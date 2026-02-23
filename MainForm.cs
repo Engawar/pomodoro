@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace PomodoroBlocker;
 
@@ -32,6 +33,13 @@ public class MainForm : Form
     private readonly Size _normalSize = new(560, 500);
     private readonly Size _compactSize = new(300, 170);
 
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpShowWindow = 0x0040;
+
+    private static readonly IntPtr HwndTopMost = new(-1);
+    private static readonly IntPtr HwndNoTopMost = new(-2);
+
     private readonly HashSet<string> _blockedProcessNames =
     [
         // Browsers
@@ -40,6 +48,9 @@ public class MainForm : Form
         "steam", "epicgameslauncher", "riotclientservices", "leagueclient", "valorant",
         "battle.net", "upc", "origin", "eadesktop", "minecraftlauncher"
     ];
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
 
     public MainForm()
     {
@@ -53,6 +64,9 @@ public class MainForm : Form
 
         InitializeUi();
         InitializeContextMenu();
+
+        Activated += (_, _) => ApplyTopMostState();
+        Shown += (_, _) => ApplyTopMostState();
 
         _tickTimer.Interval = 1000;
         _tickTimer.Tick += (_, _) => TickSecond();
@@ -162,6 +176,16 @@ public class MainForm : Form
         _contextMenu.Items.Add(_compactMenuItem);
 
         ContextMenuStrip = _contextMenu;
+        AttachContextMenuToChildControls(this);
+    }
+
+    private void AttachContextMenuToChildControls(Control parent)
+    {
+        foreach (Control control in parent.Controls)
+        {
+            control.ContextMenuStrip = _contextMenu;
+            AttachContextMenuToChildControls(control);
+        }
     }
 
     private void StartTimer()
@@ -176,6 +200,7 @@ public class MainForm : Form
         _tickTimer.Start();
         _blockTimer.Start();
         UpdateUi();
+        BringToFrontWindow();
     }
 
     private void PauseTimer()
@@ -300,6 +325,34 @@ public class MainForm : Form
     {
         _topMostLocked = !_topMostLocked;
         UpdateUi();
+
+        if (_running && _topMostLocked)
+        {
+            BringToFrontWindow();
+        }
+    }
+
+    private void ApplyTopMostState()
+    {
+        var shouldPinTopMost = _running && _topMostLocked;
+        TopMost = shouldPinTopMost;
+
+        if (!IsHandleCreated)
+        {
+            return;
+        }
+
+        var insertAfter = shouldPinTopMost ? HwndTopMost : HwndNoTopMost;
+        _ = SetWindowPos(Handle, insertAfter, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpShowWindow);
+    }
+
+    private void BringToFrontWindow()
+    {
+        WindowState = FormWindowState.Normal;
+        Show();
+        Activate();
+        BringToFront();
+        ApplyTopMostState();
     }
 
     private void UpdateUi()
@@ -314,7 +367,7 @@ public class MainForm : Form
         _startButton.Enabled = !_running;
         _pauseButton.Enabled = _running;
 
-        TopMost = _running && _topMostLocked;
+        ApplyTopMostState();
 
         _topMostMenuItem.Text = _topMostLocked ? "右クリック: 最前面固定を解除" : "右クリック: 最前面固定を有効化";
         _compactMenuItem.Text = _isCompactView ? "通常表示に戻す" : "時間のみ表示に切り替え";
