@@ -10,6 +10,7 @@ Windows向けのポモドーロタイマーです。**作業フェーズ中は�
 - 作業/休憩の切替時にアラーム音を再生
 - 最小表示（時間のみ表示）に切替可能
 - タイマー動作中は最前面固定（右クリックで解除/再有効化）
+- 作業+休憩の1サイクル完了ごとにCSVログを自動出力（GUI操作不要）
 
 ## 操作
 - **Compact View**: 時間だけ表示する最小表示へ切替
@@ -28,3 +29,8 @@ dotnet build
 
 ## ブロック対象
 `MainForm.cs` の `_blockedProcessNames` を編集してください。
+
+## 作業ログ（CSV）
+- 出力先: `ドキュメント\PomodoroBlocker\logs\pomodoro-YYYY-MM-DD.csv`
+- 1レコード: 作業+休憩の1サイクル完了ごと
+- 形式: `date,cycle_start,cycle_end,work_minutes,break_minutes,total_minutes`

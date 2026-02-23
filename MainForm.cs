@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace PomodoroBlocker;
 
@@ -29,6 +30,7 @@ public class MainForm : Form
     private bool _isWorkPhase = true;
     private bool _isCompactView;
     private bool _topMostLocked = true;
+    private DateTime? _currentCycleWorkStartedAt;
 
     private readonly Size _normalSize = new(560, 500);
     private readonly Size _compactSize = new(300, 170);
@@ -51,6 +53,11 @@ public class MainForm : Form
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
+
+    private static string LogDirectoryPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        "PomodoroBlocker",
+        "logs");
 
     public MainForm()
     {
@@ -196,6 +203,11 @@ public class MainForm : Form
             _remainingSeconds = (int)_workMinutes.Value * 60;
         }
 
+        if (!_running && _isWorkPhase && _currentCycleWorkStartedAt is null)
+        {
+            _currentCycleWorkStartedAt = DateTime.Now;
+        }
+
         _running = true;
         _tickTimer.Start();
         _blockTimer.Start();
@@ -215,6 +227,7 @@ public class MainForm : Form
     {
         _running = false;
         _isWorkPhase = true;
+        _currentCycleWorkStartedAt = null;
         _tickTimer.Stop();
         _blockTimer.Stop();
         _remainingSeconds = (int)_workMinutes.Value * 60;
@@ -232,7 +245,24 @@ public class MainForm : Form
 
         if (_remainingSeconds <= 0)
         {
+            var phaseBeforeSwitch = _isWorkPhase;
             _isWorkPhase = !_isWorkPhase;
+
+            if (phaseBeforeSwitch)
+            {
+                // Work completed -> Break started
+                if (_currentCycleWorkStartedAt is null)
+                {
+                    _currentCycleWorkStartedAt = DateTime.Now.AddMinutes(-(double)_workMinutes.Value);
+                }
+            }
+            else
+            {
+                // Break completed -> next Work started, treat one Pomodoro cycle as finished.
+                WriteCycleLog(_currentCycleWorkStartedAt ?? DateTime.Now, DateTime.Now);
+                _currentCycleWorkStartedAt = DateTime.Now;
+            }
+
             _remainingSeconds = (int)(_isWorkPhase ? _workMinutes.Value : _breakMinutes.Value) * 60;
             PlayPhaseAlarm();
         }
@@ -353,6 +383,36 @@ public class MainForm : Form
         Activate();
         BringToFront();
         ApplyTopMostState();
+    }
+
+    private void WriteCycleLog(DateTime cycleStartedAt, DateTime cycleEndedAt)
+    {
+        try
+        {
+            Directory.CreateDirectory(LogDirectoryPath);
+
+            var logFilePath = Path.Combine(LogDirectoryPath, $"pomodoro-{cycleEndedAt:yyyy-MM-dd}.csv");
+            var shouldWriteHeader = !File.Exists(logFilePath);
+
+            using var stream = new FileStream(logFilePath, FileMode.Append, FileAccess.Write, FileShare.Read);
+            using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            if (shouldWriteHeader)
+            {
+                writer.WriteLine("date,cycle_start,cycle_end,work_minutes,break_minutes,total_minutes");
+            }
+
+            var workMinutes = (int)_workMinutes.Value;
+            var breakMinutes = (int)_breakMinutes.Value;
+            var totalMinutes = workMinutes + breakMinutes;
+
+            writer.WriteLine(
+                $"{cycleEndedAt:yyyy-MM-dd},{cycleStartedAt:yyyy-MM-dd HH:mm:ss},{cycleEndedAt:yyyy-MM-dd HH:mm:ss},{workMinutes},{breakMinutes},{totalMinutes}");
+        }
+        catch
+        {
+            // Logging is automatic and best-effort only. Do not block timer behavior on write failures.
+        }
     }
 
     private void UpdateUi()
