@@ -1,0 +1,36 @@
+# Pomodoro Blocker (Windows)
+
+Windows向けのポモドーロタイマーです。**作業フェーズ中は指定したブラウザ/ゲーム系プロセスを毎秒監視して終了**します。
+
+## 仕様
+- 作業時間 / 休憩時間を分単位で設定
+- `Start / Pause / Reset`
+- 作業フェーズ中のみブロック有効
+- 休憩フェーズではブロック無効
+- 作業/休憩の切替時にアラーム音を再生
+- 最小表示（時間のみ表示）に切替可能
+- タイマー動作中は最前面固定（右クリックで解除/再有効化）
+- 作業+休憩の1サイクル完了ごとにCSVログを自動出力（GUI操作不要）
+
+## 操作
+- **Compact View**: 時間だけ表示する最小表示へ切替
+- **右クリックメニュー**:
+  - 最前面固定の解除/有効化
+  - 最小表示/通常表示の切替
+
+## 実行方法
+```bash
+dotnet build
+# Windows環境で
+ dotnet run
+```
+
+> 一部のプロセス終了には管理者権限が必要な場合があります。
+
+## ブロック対象
+`MainForm.cs` の `_blockedProcessNames` を編集してください。
+
+## 作業ログ（CSV）
+- 出力先: `ドキュメント\PomodoroBlocker\logs\pomodoro-YYYY-MM-DD.csv`
+- 1レコード: 作業+休憩の1サイクル完了ごと
+- 形式: `date,cycle_start,cycle_end,work_minutes,break_minutes,total_minutes`
